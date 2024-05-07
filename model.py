@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import os
+import json
 
 class Linear_QNet(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
@@ -19,10 +20,12 @@ class Linear_QNet(nn.Module):
         model_folder_path = './model'
         if not os.path.exists(model_folder_path):
             os.makedirs(model_folder_path)
-
         file_name = os.path.join(model_folder_path, file_name)
-        torch.save(self.state_dict(), file_name)
+        torch.save(self, file_name)
 
+    def save_history_score(self, score):
+        with open('./model/history_score.json', 'w') as file:
+            json.dump({'history_score': score}, file)
 
 class QTrainer:
     def __init__(self, model, lr, gamma):

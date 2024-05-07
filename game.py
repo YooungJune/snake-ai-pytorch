@@ -24,17 +24,18 @@ BLUE2 = (0, 100, 255)
 BLACK = (0,0,0)
 
 BLOCK_SIZE = 20
-SPEED = 40
+SPEED = 200
 
 class SnakeGameAI:
 
-    def __init__(self, w=640, h=480):
+    def __init__(self, w=640, h=480, if_show=False):
         self.w = w
         self.h = h
         # init display
         self.display = pygame.display.set_mode((self.w, self.h))
         pygame.display.set_caption('Snake')
         self.clock = pygame.time.Clock()
+        self.show_run = if_show
         self.reset()
 
 
@@ -68,6 +69,8 @@ class SnakeGameAI:
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                self.show_run = not self.show_run
         
         # 2. move
         self._move(action) # update the head
@@ -90,8 +93,9 @@ class SnakeGameAI:
             self.snake.pop()
         
         # 5. update ui and clock
-        self._update_ui()
-        self.clock.tick(SPEED)
+        if(self.show_run):
+            self._update_ui()
+            self.clock.tick(SPEED)
         # 6. return game over and score
         return reward, game_over, self.score
 

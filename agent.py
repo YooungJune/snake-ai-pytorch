@@ -5,21 +5,40 @@ from collections import deque
 from game import SnakeGameAI, Direction, Point
 from model import Linear_QNet, QTrainer
 from helper import plot
+import os
+import json
 
 MAX_MEMORY = 100_000
 BATCH_SIZE = 1000
-LR = 0.001
+LR = 0.005
 
 class Agent:
 
     def __init__(self):
+        self.load_model()
+        self.load_history_score()
         self.n_games = 0
         self.epsilon = 0 # randomness
-        self.gamma = 0.9 # discount rate
+        self.gamma = 0.4 # discount rate
         self.memory = deque(maxlen=MAX_MEMORY) # popleft()
-        self.model = Linear_QNet(11, 256, 3)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
 
+    def load_model(self):
+        if os.path.exists("./model/model.pth"):
+            self.model = torch.load("./model/model.pth", map_location='cpu')
+            print("model loaded")
+        else:
+            print("No model found, initialized new model")
+            self.model = Linear_QNet(11, 256, 3)
+
+    def load_history_score(self):
+        try:
+            with open('./model/history_score.json', 'r') as file:
+                data = json.load(file)
+                self.history_score =  data['history_score']
+        except (FileNotFoundError, ValueError):
+            print("history_score.json not found, initialized new history_score")
+            self.history_score = 0
 
     def get_state(self, game):
         head = game.snake[0]
@@ -86,7 +105,7 @@ class Agent:
 
     def get_action(self, state):
         # random moves: tradeoff exploration / exploitation
-        self.epsilon = 80 - self.n_games
+        #self.epsilon = 80 - self.n_games
         final_move = [0,0,0]
         if random.randint(0, 200) < self.epsilon:
             move = random.randint(0, 2)
@@ -132,9 +151,14 @@ def train():
 
             if score > record:
                 record = score
-                agent.model.save()
 
-            print('Game', agent.n_games, 'Score', score, 'Record:', record)
+            if score > agent.history_score:
+                agent.history_score = score
+                agent.model.save()  # 保存模型
+                agent.model.save_history_score(agent.history_score)  # 保存新的历史最高分
+                print('save model')
+
+            print('Game', agent.n_games, 'Score', score, 'Record:', record, 'history Record:', agent.history_score)
 
             plot_scores.append(score)
             total_score += score
