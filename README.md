@@ -1,3 +1,10 @@
+之前代码里没有读取模型的部分，加上了。
+
+运行方式： `python agent.py`
+以下内容是原帖
+
+-------------
+
 # Teach AI To Play Snake! Reinforcement Learning With PyTorch and Pygame
 
 In this Python Reinforcement Learning Tutorial series we teach an AI to play Snake! We build everything from scratch using Pygame and PyTorch. The tutorial consists of 4 parts:
