@@ -7,38 +7,69 @@ from model import Linear_QNet, QTrainer
 from helper import plot
 import os
 import json
+import sys
+
+# 添加上级目录到路径，以便导入 src 包
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 MAX_MEMORY = 100_000
-BATCH_SIZE = 1000
-LR = 0.005
+BATCH_SIZE = 500  # 从1000降低到500，更频繁更新
+LR = 0.01  # 从0.005增加到0.01，加快学习速度
 
 class Agent:
 
     def __init__(self):
         self.load_model()
         self.load_history_score()
-        self.n_games = 0
+        self.load_n_games()  # 加载之前训练的游戏数
         self.epsilon = 0 # randomness
-        self.gamma = 0.4 # discount rate
+        self.gamma = 0.75 # discount rate
         self.memory = deque(maxlen=MAX_MEMORY) # popleft()
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
 
     def load_model(self):
-        if os.path.exists("./model/model.pth"):
-            self.model = torch.load("./model/model.pth", map_location='cpu')
+        model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model', 'model.pth')
+        if os.path.exists(model_path):
+            self.model = torch.load(model_path, map_location='cpu')
             print("model loaded")
         else:
             print("No model found, initialized new model")
-            self.model = Linear_QNet(11, 256, 3)
+            self.model = Linear_QNet(12, 256, 3)  # 12维输入，256隐藏层，3个动作
 
     def load_history_score(self):
+        history_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model', 'history_score.json')
         try:
-            with open('./model/history_score.json', 'r') as file:
+            with open(history_path, 'r') as file:
                 data = json.load(file)
                 self.history_score =  data['history_score']
         except (FileNotFoundError, ValueError):
             print("history_score.json not found, initialized new history_score")
             self.history_score = 0
+
+    def load_n_games(self):
+        """加载之前训练的游戏数"""
+        history_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model', 'history_score.json')
+        try:
+            with open(history_path, 'r') as file:
+                data = json.load(file)
+                self.n_games = data.get('n_games', 1)
+                print(f"继续训练，当前游戏数: {self.n_games}")
+        except (FileNotFoundError, ValueError):
+            print("首次训练，游戏数从1开始")
+            self.n_games = 1
+
+    def save_n_games(self):
+        """保存当前训练的游戏数"""
+        history_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model', 'history_score.json')
+        try:
+            with open(history_path, 'r') as file:
+                data = json.load(file)
+        except (FileNotFoundError, ValueError):
+            data = {}
+        
+        data['n_games'] = self.n_games
+        with open(history_path, 'w') as file:
+            json.dump(data, file)
 
     def get_state(self, game):
         head = game.snake[0]
@@ -81,10 +112,12 @@ class Agent:
             game.food.x < game.head.x,  # food left
             game.food.x > game.head.x,  # food right
             game.food.y < game.head.y,  # food up
-            game.food.y > game.head.y  # food down
+            game.food.y > game.head.y,  # food down
+            
+            # 蛇长度信息（归一化到 0-1）
+            len(game.snake) / 100,  # 蛇长度比例
             ]
-
-        return np.array(state, dtype=int)
+        return np.array(state, dtype=float)
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done)) # popleft if MAX_MEMORY is reached
@@ -97,15 +130,15 @@ class Agent:
 
         states, actions, rewards, next_states, dones = zip(*mini_sample)
         self.trainer.train_step(states, actions, rewards, next_states, dones)
-        #for state, action, reward, nexrt_state, done in mini_sample:
-        #    self.trainer.train_step(state, action, reward, next_state, done)
 
     def train_short_memory(self, state, action, reward, next_state, done):
         self.trainer.train_step(state, action, reward, next_state, done)
 
     def get_action(self, state):
         # random moves: tradeoff exploration / exploitation
-        #self.epsilon = 80 - self.n_games
+        # 改进的epsilon衰减：更长时间的探索，确保充分学习
+        # 前500局：高概率探索，之后逐步降低
+        self.epsilon = max(10, 100 - (self.n_games / 5))  # 衰减更平缓
         final_move = [0,0,0]
         if random.randint(0, 200) < self.epsilon:
             move = random.randint(0, 2)
@@ -152,10 +185,11 @@ def train():
             if score > record:
                 record = score
 
-            if score > agent.history_score:
+            if score > agent.history_score or agent.n_games % 100 == 0:
                 agent.history_score = score
                 agent.model.save()  # 保存模型
                 agent.model.save_history_score(agent.history_score)  # 保存新的历史最高分
+                agent.save_n_games()  # 保存当前游戏数
                 print('save model')
 
             print('Game', agent.n_games, 'Score', score, 'Record:', record, 'history Record:', agent.history_score)
